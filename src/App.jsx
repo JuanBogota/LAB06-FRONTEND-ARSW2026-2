@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createStompClient, subscribeBlueprint } from './lib/stompClient.js'
-
+import { list } from './lib/blueprintsApi.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080' // Spring
 const STOMP_BASE = import.meta.env.VITE_STOMP_BASE ?? API_BASE
@@ -24,6 +24,9 @@ export default function App() {
   const canvasRef = useRef(null)
   const [points, setPoints] = useState([])
 
+  const [blueprints, setBlueprints] = useState([])   // lo guardado en el servidor
+  const [listError, setListError] = useState(null)
+
   const stompRef = useRef(null)
   const unsubRef = useRef(null)
 
@@ -38,6 +41,20 @@ export default function App() {
       .catch(err => { if (err.name !== 'AbortError') console.error('Error cargando el plano', err) })
     return () => ctrl.abort()                        
   }, [author, name, tech])
+
+  useEffect(() => {
+    if (!author) { setBlueprints([]); setListError(null); return }
+    const ctrl = new AbortController()
+    setListError(null)
+    list(author, { signal: ctrl.signal })
+      .then(setBlueprints)
+      .catch(err => {
+        if (err.name === 'AbortError') return
+        setBlueprints([])
+        setListError(err.message)
+      })
+    return () => ctrl.abort()
+  }, [author])
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
@@ -81,7 +98,13 @@ export default function App() {
       setPoints(prev => [...prev, point])   // sin tiempo real (None): dibujo local
     }
   }
+  const sortedBlueprints = [...blueprints].sort((a, b) => a.name.localeCompare(b.name))
+  const totalPoints = blueprints.reduce((sum, bp) => sum + bp.points.length, 0)
 
+  function selectBlueprint(bpName) {
+    setNameInput(bpName)
+    setName(bpName)   // sin esperar los 400 ms del debounce
+  }
   return (
     <div style={{fontFamily:'Inter, system-ui', padding:16, maxWidth:900}}>
       <h2>BluePrints RT – STOMP</h2>
@@ -102,6 +125,41 @@ export default function App() {
         onClick={onClick}
       />
       <p style={{opacity:.7, marginTop:8}}>Tip: abre 2 pestañas y dibuja alternando para ver la colaboración.</p>
+          <h3 style={{marginTop:16}}>Planos de {author || '…'}</h3>
+          {listError && <p role="alert" style={{color:'#b00020'}}>{listError}</p>}
+          <table style={{borderCollapse:'collapse', width:'100%', maxWidth:600}}>
+            <thead>
+              <tr>
+                <th style={{textAlign:'left'}}>Plano</th>
+                <th style={{textAlign:'right'}}>Puntos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedBlueprints.map(bp => {
+                const selected = bp.name === name
+                const unsaved = selected && points.length !== bp.points.length
+                return (
+                  <tr
+                    key={bp.name}
+                    onClick={() => selectBlueprint(bp.name)}
+                    style={{cursor:'pointer', background: selected ? '#eef4ff' : 'transparent'}}
+                  >
+                    <td>{bp.name}{unsaved && <em style={{opacity:.6}}> (sin guardar)</em>}</td>
+                    <td style={{textAlign:'right'}}>{bp.points.length}</td>
+                  </tr>
+                )
+              })}
+              {blueprints.length === 0 && !listError && (
+                <tr><td colSpan={2} style={{opacity:.6}}>Este autor no tiene planos</td></tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td><strong>Total</strong></td>
+                <td style={{textAlign:'right'}}><strong>{totalPoints}</strong></td>
+              </tr>
+            </tfoot>
+          </table>
     </div>
   )
 }
