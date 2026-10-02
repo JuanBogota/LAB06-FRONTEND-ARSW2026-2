@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createStompClient, subscribeBlueprint } from './lib/stompClient.js'
-
+import { list, create, save, remove } from './lib/blueprintsApi.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080' // Spring
 const STOMP_BASE = import.meta.env.VITE_STOMP_BASE ?? API_BASE
@@ -24,6 +24,12 @@ export default function App() {
   const canvasRef = useRef(null)
   const [points, setPoints] = useState([])
 
+  const [blueprints, setBlueprints] = useState([])   // lo guardado en el servidor
+  const [listError, setListError] = useState(null)
+
+  const [message, setMessage] = useState(null)   // { type: 'ok' | 'error', text }
+  const [busy, setBusy] = useState(false)
+
   const stompRef = useRef(null)
   const unsubRef = useRef(null)
 
@@ -38,6 +44,20 @@ export default function App() {
       .catch(err => { if (err.name !== 'AbortError') console.error('Error cargando el plano', err) })
     return () => ctrl.abort()                        
   }, [author, name, tech])
+
+  useEffect(() => {
+    if (!author) { setBlueprints([]); setListError(null); return }
+    const ctrl = new AbortController()
+    setListError(null)
+    list(author, { signal: ctrl.signal })
+      .then(setBlueprints)
+      .catch(err => {
+        if (err.name === 'AbortError') return
+        setBlueprints([])
+        setListError(err.message)
+      })
+    return () => ctrl.abort()
+  }, [author])
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
@@ -81,7 +101,57 @@ export default function App() {
       setPoints(prev => [...prev, point])   // sin tiempo real (None): dibujo local
     }
   }
+  const sortedBlueprints = [...blueprints].sort((a, b) => a.name.localeCompare(b.name))
+  const totalPoints = blueprints.reduce((sum, bp) => sum + bp.points.length, 0)
 
+  function selectBlueprint(bpName) {
+    setNameInput(bpName)
+    setName(bpName)   // sin esperar los 400 ms del debounce
+  }
+  async function refreshList() {
+    try {
+      setBlueprints(await list(author))
+      setListError(null)
+    } catch (err) {
+      setBlueprints([])
+      setListError(err.message)
+    }
+  }
+
+  // Ejecuta una acción del CRUD, muestra el resultado y refresca la lista.
+  async function runAction(action, okText) {
+    if (!author || !name) {
+      setMessage({ type: 'error', text: 'Escribe un autor y un plano primero' })
+      return false
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      await action()
+      setMessage({ type: 'ok', text: okText })
+      return true
+    } catch (err) {
+      setMessage({ type: 'error', text: friendlyError(err) })
+      return false
+    } finally {
+      await refreshList()
+      setBusy(false)
+    }
+  }
+
+  function friendlyError(err) {
+    if (err.status === 0) return 'No se pudo conectar con el servidor'
+    if (err.status === 404) return 'El plano no existe, créalo primero con Create'
+    if (err.status === 400) return 'Ese plano ya existe'
+    return err.message
+  }
+
+  const onCreate = () => runAction(() => create(author, name), `Plano "${name}" creado`)
+  const onSave = () => runAction(() => save(author, name, points), `Plano "${name}" guardado`)
+  const onDelete = async () => {
+    const ok = await runAction(() => remove(author, name), `Plano "${name}" eliminado`)
+    if (ok) setPoints([])
+  }
   return (
     <div style={{fontFamily:'Inter, system-ui', padding:16, maxWidth:900}}>
       <h2>BluePrints RT – STOMP</h2>
@@ -101,7 +171,52 @@ export default function App() {
         style={{border:'1px solid #ddd', borderRadius:12}}
         onClick={onClick}
       />
+      <div style={{display:'flex', gap:8, marginTop:8}}>
+        <button onClick={onCreate} disabled={busy}>Create</button>
+        <button onClick={onSave} disabled={busy}>Save</button>
+        <button onClick={onDelete} disabled={busy}>Delete</button>
+      </div>
+      {message && (
+        <p role="status" style={{color: message.type === 'error' ? '#b00020' : '#1b6e2d'}}>
+          {message.text}
+        </p>
+      )}
       <p style={{opacity:.7, marginTop:8}}>Tip: abre 2 pestañas y dibuja alternando para ver la colaboración.</p>
+          <h3 style={{marginTop:16}}>Planos de {author || '…'}</h3>
+          {listError && <p role="alert" style={{color:'#b00020'}}>{listError}</p>}
+          <table style={{borderCollapse:'collapse', width:'100%', maxWidth:600}}>
+            <thead>
+              <tr>
+                <th style={{textAlign:'left'}}>Plano</th>
+                <th style={{textAlign:'right'}}>Puntos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedBlueprints.map(bp => {
+                const selected = bp.name === name
+                const unsaved = selected && points.length !== bp.points.length
+                return (
+                  <tr
+                    key={bp.name}
+                    onClick={() => selectBlueprint(bp.name)}
+                    style={{cursor:'pointer', background: selected ? '#eef4ff' : 'transparent'}}
+                  >
+                    <td>{bp.name}{unsaved && <em style={{opacity:.6}}> (sin guardar)</em>}</td>
+                    <td style={{textAlign:'right'}}>{bp.points.length}</td>
+                  </tr>
+                )
+              })}
+              {blueprints.length === 0 && !listError && (
+                <tr><td colSpan={2} style={{opacity:.6}}>Este autor no tiene planos</td></tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td><strong>Total</strong></td>
+                <td style={{textAlign:'right'}}><strong>{totalPoints}</strong></td>
+              </tr>
+            </tfoot>
+          </table>
     </div>
   )
 }
