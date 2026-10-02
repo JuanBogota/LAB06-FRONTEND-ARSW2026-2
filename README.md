@@ -595,4 +595,7 @@ Con dos sesiones abiertas, las estadísticas de Spring coinciden con el contador
 El health check no es un "siempre UP": pasó a 503 cuando la base de datos dejó de responder y volvió a 200 al reiniciarla. El contador de sesiones coincide con las estadísticas internas de Spring. El contador vive en memoria, así que vuelve a 0 si se reinicia el backend, lo cual es coherente porque las sesiones también se pierden. 
 
 
+### Video Explicativo
+https://youtu.be/uyGvYHmQqXY
+
 ---
