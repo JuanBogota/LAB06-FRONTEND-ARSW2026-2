@@ -407,7 +407,41 @@ Se podría mejorar mostrar un indicador "conectado / sin conexión" y no dibujar
 
 ### 6. Selector de tecnología (None / STOMP)
 
-*(pendiente)*
+Como elegimos STOMP como backend de tiempo real, el selector tiene dos opciones: None (solo local) y STOMP (Spring). Se eliminó el código de Socket.IO porque nuestro backend no lo usa.
+
+**Por qué STOMP y no Socket.IO**
+
+| | STOMP (elegido) | Socket.IO |
+|---|---|---|
+| Dónde corre | Dentro de nuestra misma API Spring | Habría que montar un servicio Node aparte |
+| Procesos a operar | 1 | 2 |
+| Reutilización | Usa la misma validación y configuración de la API | Habría que repetirlas o conectar ambos servicios |
+
+**Cómo se comporta cada opción**
+
+| Opción | Conexión | Qué hace el clic |
+|---|---|---|
+| STOMP | Abre la conexión WebSocket y se suscribe al plano | Envía el punto al servidor y lo dibuja cuando el servidor lo devuelve |
+| None | No abre ninguna conexión | Dibuja el punto solo en esa pestaña |
+
+Al volver de "None" a "STOMP" se vuelve a pedir el plano guardado, así que lo dibujado en modo local se descarta. Con eso la pestaña no queda distinta de las demás.
+
+**Evidencia**
+
+Al cambiar a "None", la conexión anterior se cierra en orden (UNSUBSCRIBE, DISCONNECT, RECEIPT) y no se abre ninguna nueva:
+
+![alt text](docs/img/06-none.png)
+
+Un clic en la pestaña con "None" dibuja el punto solo ahí, la pestaña en STOMP no lo recibe:
+
+![alt text](docs/img/06-none-clic.png)
+
+Al volver a "STOMP" se abre una conexión nueva y el canvas vuelve al plano guardado:
+
+![alt text](docs/img/06-vuelta-stomp.png)
+
+None muestra que la aplicación sigue funcionando sin tiempo real, el dibujo local se mantiene aunque no haya conexión. Tener el transporte como una opción intercambiable en el front es el mismo criterio de adaptadores que se aplicó en el backend.
+
 
 ### 7. Observabilidad, análisis y decisiones
 

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createStompClient, subscribeBlueprint } from './lib/stompClient.js'
-import { createSocket } from './lib/socketIoClient.js'
+
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080' // Spring
-const IO_BASE  = import.meta.env.VITE_IO_BASE  ?? 'http://localhost:3001' // Node/Socket.IO
 const STOMP_BASE = import.meta.env.VITE_STOMP_BASE ?? API_BASE
 const BP_URL = `${API_BASE}/api/v1/blueprints`
 
@@ -27,7 +26,6 @@ export default function App() {
 
   const stompRef = useRef(null)
   const unsubRef = useRef(null)
-  const socketRef = useRef(null)
 
 
   useEffect(() => {
@@ -39,7 +37,7 @@ export default function App() {
       .then(res => setPoints(res?.data?.points ?? []))
       .catch(err => { if (err.name !== 'AbortError') console.error('Error cargando el plano', err) })
     return () => ctrl.abort()                        
-  }, [author, name])
+  }, [author, name, tech])
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
@@ -55,29 +53,21 @@ export default function App() {
   useEffect(() => {
     unsubRef.current?.unsubscribe?.(); unsubRef.current = null
     stompRef.current?.deactivate?.(); stompRef.current = null
-    socketRef.current?.disconnect?.(); socketRef.current = null
     if (!author || !name) return
 
     if (tech === 'stomp') {
       const client = createStompClient(STOMP_BASE)
       stompRef.current = client
       client.onConnect = () => {
-        unsubRef.current = subscribeBlueprint(client, author, name, (upd)=> {
+        unsubRef.current = subscribeBlueprint(client, author, name, (upd) => {
           setPoints(prev => [...prev, ...upd.points])
         })
       }
       client.activate()
-    } else {
-      const s = createSocket(IO_BASE)
-      socketRef.current = s
-      const room = `blueprints.${author}.${name}`
-      s.emit('join-room', room)
-      s.on('blueprint-update', (upd)=> setPoints(prev => [...prev, ...upd.points]))
     }
     return () => {
       unsubRef.current?.unsubscribe?.(); unsubRef.current = null
       stompRef.current?.deactivate?.()
-      socketRef.current?.disconnect?.()
     }
   }, [tech, author, name])
 
@@ -87,22 +77,19 @@ export default function App() {
 
     if (tech === 'stomp' && stompRef.current?.connected) {
       stompRef.current.publish({ destination: '/app/draw', body: JSON.stringify({ author, name, point }) })
-    } else if (tech === 'socketio' && socketRef.current?.connected) {
-      const room = `blueprints.${author}.${name}`
-      socketRef.current.emit('draw-event', { room, author, name, point })
     } else {
-      setPoints(prev => [...prev, point])
+      setPoints(prev => [...prev, point])   // sin tiempo real (None): dibujo local
     }
   }
 
   return (
     <div style={{fontFamily:'Inter, system-ui', padding:16, maxWidth:900}}>
-      <h2>BluePrints RT – Socket.IO vs STOMP</h2>
+      <h2>BluePrints RT – STOMP</h2>
       <div style={{display:'flex', gap:8, alignItems:'center', marginBottom:8}}>
         <label>Tecnología:</label>
         <select value={tech} onChange={e=>setTech(e.target.value)}>
+          <option value="none">None (solo local)</option>
           <option value="stomp">STOMP (Spring)</option>
-          <option value="socketio">Socket.IO (Node)</option>
         </select>
         <input value={authorInput} onChange={e=>setAuthorInput(e.target.value)} placeholder="autor"/>
         <input value={nameInput} onChange={e=>setNameInput(e.target.value)} placeholder="plano"/>
