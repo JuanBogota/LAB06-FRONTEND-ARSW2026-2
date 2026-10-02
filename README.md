@@ -4,6 +4,10 @@
 
 **Autores:** Carlos Duban Rojas y Juan Daniel Bogotá Fuentes
 
+**Repositorios del proyecto:**
+- Frontend (este repositorio): <https://github.com/JuanBogota/LAB06-FRONTEND-ARSW2026-2>
+- Backend: <https://github.com/JuanBogota/LAB06-BACKEND-ARSW2026-2>
+
 Informe de laboratorio documentando la integración del front de BluePrints con un backend de tiempo real (STOMP sobre Spring Boot).
 
 La solución del equipo está al final del documento.
@@ -202,6 +206,34 @@ MIT (o la definida por el curso/equipo).
 | npm | 11.19.0 |
 | Spring Boot | 3.3.4 |
 | Sistema operativo | Windows 11 |
+
+## ▶️ Cómo ejecutar nuestra solución
+
+**1) Backend** ([repositorio](https://github.com/JuanBogota/LAB06-BACKEND-ARSW2026-2)):
+
+```bash
+git clone https://github.com/JuanBogota/LAB06-BACKEND-ARSW2026-2.git
+cd LAB06-BACKEND-ARSW2026-2
+docker compose up -d      # PostgreSQL
+mvn spring-boot:run       # API en http://localhost:8080
+```
+
+**2) Frontend** (este repositorio). Crear `.env.local` en la raíz con:
+
+```bash
+VITE_API_BASE=http://localhost:8080
+VITE_STOMP_BASE=http://localhost:8080
+```
+
+y luego:
+
+```bash
+npm i
+npm run dev               # http://localhost:5173
+```
+
+Para probar la colaboración, abre dos pestañas en `http://localhost:5173` con el mismo autor y plano. Antes hay que crear el plano de prueba (ver el README del backend).
+
 
 ## 📖 Actividades del laboratorio
 
