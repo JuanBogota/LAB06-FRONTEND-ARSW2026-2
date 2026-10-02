@@ -316,13 +316,90 @@ STOMP funciona contra nuestra API: los puntos válidos se reenvían a todos los 
 
 ---
 
-### 3. Front: estado local y dibujo incremental
+### 3. Front: carga del plano y puntos acumulados
 
-*(pendiente)*
+Se arregló el front para que se conecte bien a nuestra API (LAB03) y para que el canvas vaya sumando los puntos que llegan, en vez de borrarse.
+
+Con STOMP activo, el clic no dibuja al instante, envía el punto al servidor y lo dibuja cuando el servidor lo devuelve por el tópico. Así todos los usuarios ven los puntos en el mismo orden. El costo es que, si se cae la conexión, el clic no dibuja. La otra opción era dibujar al instante y descartar el eco, pero eso exige que el servidor indique quién envió cada punto. Sin tiempo real, el clic dibuja de forma local.
+
+**Evidencia**
+
+Crear el plano de prueba en la API (se hizo desde un clon limpio del backend):
+
+```text
+PS C:\...\LAB06-BACKEND-ARSW2026-2> curl.exe -i -X POST http://localhost:8080/api/v1/blueprints -H "Content-Type: application/json" --data-binary "@plano.json"
+HTTP/1.1 201
+Content-Type: application/json
+Date: Fri, 02 Oct 2026 02:20:08 GMT
+
+{"code":201,"message":"resource created","data":{"author":"juan","name":"plano-1","points":[{"x":10,"y":10},{"x":40,"y":50},{"x":120,"y":60}]}}
+```
+
+Plano cargado, con sus tres puntos marcados:
+
+![alt text](docs/img/03-plano-cargado.png)
+
+El canvas con los puntos acumulados de cada clic:
+
+![alt text](docs/img/03-puntos-agregados.png)
+
+Contenido real de un mensaje que llega del servidor:
+
+```text
+MESSAGE
+destination:/topic/blueprints.juan.plano-1
+content-type:application/json
+content-length:63
+
+{"author":"juan","name":"plano-1","points":[{"x":262,"y":203}]}
+```
+
+Al cerrar la conexión se ven UNSUBSCRIBE, DISCONNECT y la confirmación RECEIPT del servidor, es decir, un cierre ordenado:
+
+![alt text](docs/img/03-frames-stomp.png)
+
+--- 
 
 ### 4. Prueba de colaboración en vivo (2 pestañas)
 
-*(pendiente)*
+Se probó el sistema con varias pestañas sobre el mismo plano (juan / plano-1) y se observó qué pasa cuando el servidor se cae y vuelve.
+
+**Pruebas y resultados**
+
+| Prueba | Qué se hizo | Qué pasó |
+|---|---|---|
+| A. Colaboración | Dos pestañas en el mismo plano, haciendo clic por turnos | Cada punto aparece en las dos pestañas, con el mismo dibujo |
+| B. Quien entra tarde | Se abrió una tercera pestaña después de dibujar | Solo muestra los 3 puntos originales guardados, no ve lo dibujado en vivo |
+| C1. Servidor caído | Se detuvo el backend | El navegador reintenta conectarse y falla con ERR_CONNECTION_REFUSED |
+| C2. Clic con servidor caído | Un clic en la pestaña A | El punto se dibuja solo en A, la otra pestaña no lo recibe |
+| C3. Servidor de vuelta | Se encendió el backend y se hizo un clic en A, sin recargar | El punto aparece en las dos pestañas, la reconexión funcionó sola |
+
+**Evidencia**
+
+Colaboración y pestaña que entra tarde (las dos de la derecha son iguales; la de la izquierda solo tiene los 3 puntos originales):
+
+![alt text](docs/img/04-colaboracion.png)
+
+Servidor apagado, con el error de conexión en el WS:
+
+![alt text](docs/img/04-caida.png)
+
+Un clic con el servidor apagado, el punto aparece solo en la pestaña de la derecha:
+
+![alt text](docs/img/04-clic-local.png)
+
+Servidor encendido y un clic en la pestaña de la derecha: el punto nuevo llega a las dos pestañas, pero la de la derecha conserva además el punto dibujado durante la caída:
+
+![alt text](docs/img/04-reconexion.png)
+
+
+La reconexión es automática. El cliente reintenta cada segundo y, al volver el servidor, se conecta y se suscribe de nuevo sin recargar la página.
+
+Lo dibujado durante una caída no se sincroniza. Si el servidor está apagado, el clic se dibuja solo en esa pestaña y esa pestaña queda distinta de las demás, sin avisar al usuario.
+
+Lo dibujado en vivo no se guarda. Quien entra tarde, o recarga, solo ve lo que ya estaba guardado en la base de datos. Es lo que decisidimos en la actividad 2.
+
+Se podría mejorar mostrar un indicador "conectado / sin conexión" y no dibujar mientras no haya conexión; al reconectarse, volver a pedir el plano por REST, o guardar cada punto en el servidor antes de difundirlo, a costa de una escritura por clic y de cuidar la concurrencia.
 
 ### 5. CRUD en la UI y total de puntos por autor
 

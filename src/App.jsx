@@ -4,45 +4,66 @@ import { createSocket } from './lib/socketIoClient.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080' // Spring
 const IO_BASE  = import.meta.env.VITE_IO_BASE  ?? 'http://localhost:3001' // Node/Socket.IO
+const STOMP_BASE = import.meta.env.VITE_STOMP_BASE ?? API_BASE
+const BP_URL = `${API_BASE}/api/v1/blueprints`
 
 export default function App() {
   const [tech, setTech] = useState('stomp')
+  const [authorInput, setAuthorInput] = useState('juan')
+  const [nameInput, setNameInput] = useState('plano-1')
   const [author, setAuthor] = useState('juan')
   const [name, setName] = useState('plano-1')
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setAuthor(authorInput.trim())
+      setName(nameInput.trim())
+    }, 400)
+    return () => clearTimeout(t)
+  }, [authorInput, nameInput])
+
   const canvasRef = useRef(null)
+  const [points, setPoints] = useState([])
 
   const stompRef = useRef(null)
   const unsubRef = useRef(null)
   const socketRef = useRef(null)
 
-  useEffect(() => {
-    fetch(`${tech==='stomp'?API_BASE:IO_BASE}/api/blueprints/${author}/${name}`)
-      .then(r=>r.json())
-      .then(drawAll)
-  }, [tech, author, name])
 
-  function drawAll(bp) {
+  useEffect(() => {
+    if (!author || !name) { setPoints([]); return }
+    const ctrl = new AbortController()
+    setPoints([])
+    fetch(`${BP_URL}/${author}/${name}`, { signal: ctrl.signal })
+      .then(r => (r.ok ? r.json() : null))
+      .then(res => setPoints(res?.data?.points ?? []))
+      .catch(err => { if (err.name !== 'AbortError') console.error('Error cargando el plano', err) })
+    return () => ctrl.abort()                        
+  }, [author, name])
+
+  useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
     if (!ctx) return
-    ctx.clearRect(0,0,600,400)
+    ctx.clearRect(0, 0, 600, 400)
+    if (points.length === 0) return
     ctx.beginPath()
-    bp.points.forEach((p,i)=> {
-      if (i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y)
-    })
+    points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
     ctx.stroke()
-  }
+    points.forEach(p => ctx.fillRect(p.x - 2, p.y - 2, 4, 4))
+  }, [points])
 
   useEffect(() => {
     unsubRef.current?.unsubscribe?.(); unsubRef.current = null
     stompRef.current?.deactivate?.(); stompRef.current = null
     socketRef.current?.disconnect?.(); socketRef.current = null
+    if (!author || !name) return
 
     if (tech === 'stomp') {
-      const client = createStompClient(API_BASE)
+      const client = createStompClient(STOMP_BASE)
       stompRef.current = client
       client.onConnect = () => {
         unsubRef.current = subscribeBlueprint(client, author, name, (upd)=> {
-          drawAll({ points: upd.points })
+          setPoints(prev => [...prev, ...upd.points])
         })
       }
       client.activate()
@@ -51,7 +72,7 @@ export default function App() {
       socketRef.current = s
       const room = `blueprints.${author}.${name}`
       s.emit('join-room', room)
-      s.on('blueprint-update', (upd)=> drawAll({ points: upd.points }))
+      s.on('blueprint-update', (upd)=> setPoints(prev => [...prev, ...upd.points]))
     }
     return () => {
       unsubRef.current?.unsubscribe?.(); unsubRef.current = null
@@ -69,6 +90,8 @@ export default function App() {
     } else if (tech === 'socketio' && socketRef.current?.connected) {
       const room = `blueprints.${author}.${name}`
       socketRef.current.emit('draw-event', { room, author, name, point })
+    } else {
+      setPoints(prev => [...prev, point])
     }
   }
 
@@ -81,8 +104,8 @@ export default function App() {
           <option value="stomp">STOMP (Spring)</option>
           <option value="socketio">Socket.IO (Node)</option>
         </select>
-        <input value={author} onChange={e=>setAuthor(e.target.value)} placeholder="autor"/>
-        <input value={name} onChange={e=>setName(e.target.value)} placeholder="plano"/>
+        <input value={authorInput} onChange={e=>setAuthorInput(e.target.value)} placeholder="autor"/>
+        <input value={nameInput} onChange={e=>setNameInput(e.target.value)} placeholder="plano"/>
       </div>
       <canvas
         ref={canvasRef}
