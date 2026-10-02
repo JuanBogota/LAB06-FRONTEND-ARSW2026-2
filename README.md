@@ -435,7 +435,48 @@ Se podría mejorar mostrar un indicador "conectado / sin conexión" y no dibujar
 
 ### 5. CRUD en la UI y total de puntos por autor
 
-**Evidencia**
+**Qué se hizo**
+
+En el backend se completó el CRUD que faltaba: reemplazar todos los puntos de un plano (PUT) y eliminarlo (DELETE), y el GET por autor ahora devuelve una lista vacía cuando el autor no tiene planos. En el front se creó una capa que habla con la API (`src/lib/blueprintsApi.js`) para que la interfaz no conozca URLs ni el sobre `ApiResponse`, un panel con la tabla de planos del autor y su total de puntos (calculado con `reduce`), y los botones Create, Save y Delete con mensajes de error visibles.
+
+**Decisiones**
+
+| Decisión | Elegida | Alternativa | Por qué |
+|---|---|---|---|
+| Qué hace PUT con los puntos | Reemplaza todos | Agregar o fusionar | PUT es idempotente y permite borrar puntos |
+| Dos personas guardan a la vez | Gana el último (*last-write-wins*) | Bloqueo optimista con `@Version` | Más simple y suficiente para el laboratorio; es una limitación conocida |
+| GET de un autor sin planos | 200 con lista vacía | 404 | La colección existe aunque esté vacía; el 404 queda para un plano concreto |
+| Save si el plano no existe | Error 404 visible | Crearlo | Evita crear planos basura mientras se escribe (debounce de 400 ms) |
+| Save y las otras pestañas | No avisa | Difundir el plano completo | El tiempo real ya difundió los puntos y difundirlos de nuevo los duplicaría |
+| Tabla frente a puntos sin guardar | La tabla muestra lo guardado; la fila marca "(sin guardar)" | Mostrar el borrador | El servidor es la fuente de verdad |
+| `@Transactional` | En el adaptador de Postgres | En el servicio | Es un detalle de JPA; el dominio sigue sin anotaciones |
+
+**Evidencia (backend)**
+
+Antes del cambio, un autor sin planos devolvía 404:
+
+    curl.exe -i http://localhost:8080/api/v1/blueprints/autor_que_no_existe
+    HTTP/1.1 404
+    {"code":404,"message":"No blueprints for author: autor_que_no_existe","data":null}
+
+Después de los cambios, con `curl.exe`:
+
+| Caso | Resultado |
+|---|---|
+| POST crea `ana/casa` | 201 |
+| GET `/ana` con un plano | 200 con 1 plano |
+| PUT con 2 puntos | 202, quedan (1,2) y (3,4) |
+| PUT con 1 punto | 202, queda solo (9,9): reemplaza, no agrega |
+| PUT a plano inexistente | 404 `Blueprint not found: ana/noexiste` |
+| PUT con `{}` | 400 `points: no debe ser nulo` |
+| DELETE existente | 200 |
+| DELETE repetido | 404 |
+| GET `/ana` sin planos | 200 con `"data":[]` |
+
+Las pruebas se hicieron contra Postgres. `InMemoryBlueprintPersistence` compila y cumple el mismo contrato, pero no se ejecutó porque `@Primary` deja activa solo la de Postgres.
+
+
+**Evidencia (interfaz)**
 
 Panel del autor 'ana': la tabla lista cada plano con su número de puntos y el Total.
 
@@ -460,6 +501,13 @@ Segundo Delete del mismo plano: el servidor responde 404 y se muestra el error.
 Backend detenido: la interfaz muestra que no puede conectarse
 
 ![Backend caído](docs/img/05-error-backend-caido.png)
+
+**Análisis**
+Create, Save y Delete refrescan la lista y el Total del autor después de cada acción, aunque falle. Los errores se muestran en pantalla y no solo en la consola.
+Se probaron manualmente Create y Create duplicado, sin captura   
+
+
+
 ### 6. Selector de tecnología (None / STOMP)
 
 Como elegimos STOMP como backend de tiempo real, el selector tiene dos opciones: None (solo local) y STOMP (Spring). Se eliminó el código de Socket.IO porque nuestro backend no lo usa.
