@@ -33,7 +33,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    unsubRef.current?.(); unsubRef.current = null
+    unsubRef.current?.unsubscribe?.(); unsubRef.current = null
     stompRef.current?.deactivate?.(); stompRef.current = null
     socketRef.current?.disconnect?.(); socketRef.current = null
 
@@ -54,7 +54,7 @@ export default function App() {
       s.on('blueprint-update', (upd)=> drawAll({ points: upd.points }))
     }
     return () => {
-      unsubRef.current?.(); unsubRef.current = null
+      unsubRef.current?.unsubscribe?.(); unsubRef.current = null
       stompRef.current?.deactivate?.()
       socketRef.current?.disconnect?.()
     }

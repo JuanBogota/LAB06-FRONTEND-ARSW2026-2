@@ -266,7 +266,55 @@ El tráfico del WebSocket confirma el flujo publicar/suscribir: cada punto envia
 
 ### 2. Integración de STOMP a nuestra API CRUD (puertos y adaptadores)
 
-*(pendiente)*
+Se descartó el backend guía y se agregó STOMP directamente a nuestra API (LAB03: Spring Boot, PostgreSQL, rutas /api/v1/blueprints). Así todo corre en un solo proceso en el puerto 8080.
+
+Cuando alguien hace clic en el canvas, el navegador envía el punto al servidor. El servidor lo valida y lo reenvía a todos los que están viendo el mismo plano. Para lograrlo se separó el trabajo en tres partes, de modo que la lógica no dependa de la tecnología de mensajería:
+
+| Clase | Qué hace |
+|---|---|
+| DrawController | Recibe el mensaje que llega desde el navegador |
+| DrawingService | Revisa que los datos sean válidos |
+| StompBlueprintEventPublisher | Envía el punto a los demás usuarios |
+---
+
+Además se agregaron WebSocketConfig (configura el canal de conexión /ws-blueprints) y CorsConfig (permite que el front en localhost:5173 se comunique con la API).
+
+Solo se envía el punto nuevo, no el plano completo. Los clics no se guardan en la base de datos. Solo se reenvían a los demás. El plano se guarda cuando el usuario presiona Save. Así se evitan muchas escrituras, pero quien entra tarde no ve puntos que aún no se hayan guardado.
+
+Se validan los nombres. El autor y el plano solo pueden tener letras, números, _ y -. Esto evita que nombres como a.b se confundan con otros canales.
+
+Encontramos un problema al arrancar LAB03 con el backend guía todavía encendido, falló con el mensaje "Web server failed to start. Port 8080 was already in use". Los dos usan el mismo puerto, así que no pueden estar encendidos a la vez.
+
+**Evidencia del caso aprobado:**
+
+Al hacer un clic, el navegador se conecta, se suscribe al plano, envía el punto y recibe de vuelta el mensaje del servidor:
+
+![alt text](docs/img/02-frames-validos.png)
+
+En la terminal de LAB03 se ve cada punto publicado:
+
+```text
+2026-10-01T16:18:15.129-05:00  INFO ... StompBlueprintEventPublisher : Punto Point[x=210, y=97] publicado en /topic/blueprints.juan.plano-1
+2026-10-01T16:21:03.326-05:00  INFO ... StompBlueprintEventPublisher : Punto Point[x=417, y=114] publicado en /topic/blueprints.juan.plano-1
+2026-10-01T16:21:03.863-05:00  INFO ... StompBlueprintEventPublisher : Punto Point[x=314, y=130] publicado en /topic/blueprints.juan.plano-1
+```
+
+**Evidencia del caso rechazado:**
+
+Con el autor a.b el navegador envía los puntos, pero el servidor no responde con ningún mensaje, porque ese nombre no es válido:
+
+![alt text](docs/img/02-frames-rechazo.png)
+
+En la terminal de LAB03 aparece el aviso de rechazo:
+
+```text
+2026-10-01T20:21:30.865-05:00  WARN ... DrawController : Mensaje /draw rechazado: author y name deben ser alfanuméricos (_ y - permitidos) y point es obligatorio
+2026-10-01T20:21:43.897-05:00  WARN ... DrawController : Mensaje /draw rechazado: author y name deben ser alfanuméricos (_ y - permitidos) y point es obligatorio
+```
+
+STOMP funciona contra nuestra API: los puntos válidos se reenvían a todos los que ven el plano y los inválidos se rechazan y quedan registrados en el log. Separar la recepción, la validación y el envío en tres clases permite cambiar la tecnología de mensajería sin tocar la lógica del negocio, que es la idea de la Arquitectura Hexagonal. Además, el envío por canales (publicar/suscribirse) hace que quien dibuja no tenga que saber quién está mirando.
+
+---
 
 ### 3. Front: estado local y dibujo incremental
 
