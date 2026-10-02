@@ -548,6 +548,51 @@ None muestra que la aplicación sigue funcionando sin tiempo real, el dibujo loc
 
 ### 7. Observabilidad, análisis y decisiones
 
-*(pendiente)*
+**Qué se hizo**
+
+En el backend se agregaron dos cosas de observabilidad. Primero, un health check con Spring Boot Actuator en `/actuator/health`, que además revisa la conexión con la base de datos. Segundo, una clase en el paquete `realtime` (`WebSocketSessionLogger`) que escucha los eventos de Spring `SessionConnectedEvent` y `SessionDisconnectEvent`, registra cada conexión y desconexión STOMP y lleva la cuenta de sesiones activas.
+
+**Decisiones**
+
+| Decisión | Elegida | Por qué |
+|---|---|---|
+| Endpoints de Actuator expuestos | Solo `health` | `env`, `beans` o `metrics` pueden revelar configuración interna |
+| Dónde vive el registro de sesiones | Paquete `realtime` (adaptador) | El dominio no debe saber que existen sesiones WebSocket |
+| Contador de sesiones | `AtomicInteger` | Varias conexiones pueden llegar a la vez desde hilos distintos |
+| Contador nunca negativo | `Math.max(0, n - 1)` | Protege si llega una desconexión sin su conexión previa |
+
+**Evidencia: health check**
+
+    curl.exe -i http://localhost:8080/actuator/health
+    HTTP/1.1 200
+    {"status":"UP"}
+
+    curl.exe -i http://localhost:8080/actuator/env
+    HTTP/1.1 404
+
+Con Postgres detenido (`docker stop RESTAPIS_BLUEPRINTS`) y luego reiniciado:
+
+    HTTP/1.1 503
+    {"status":"DOWN"}
+
+    HTTP/1.1 200
+    {"status":"UP"}
+
+Al arrancar, el log confirma que solo hay un endpoint expuesto: `Exposing 1 endpoint beneath base path '/actuator'`.
+
+**Evidencia: logs de WebSocket**
+
+Se abrieron dos pestañas del front y luego se cerró una:
+
+    09:27:38 WebSocket conectado: sesion=d779f38c-... | sesiones activas=1
+    09:27:43 WebSocket conectado: sesion=34da2ae2-... | sesiones activas=2
+    09:29:48 WebSocket desconectado: sesion=34da2ae2-... | sesiones activas=1
+
+Con dos sesiones abiertas, las estadísticas de Spring coinciden con el contador propio: `2 current WS ... CONNECT(2)-CONNECTED(2)-DISCONNECT(0)`.
+
+**Análisis**
+
+El health check no es un "siempre UP": pasó a 503 cuando la base de datos dejó de responder y volvió a 200 al reiniciarla. El contador de sesiones coincide con las estadísticas internas de Spring. El contador vive en memoria, así que vuelve a 0 si se reinicia el backend, lo cual es coherente porque las sesiones también se pierden. 
+
 
 ---
