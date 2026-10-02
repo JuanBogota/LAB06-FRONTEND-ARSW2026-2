@@ -435,8 +435,31 @@ Se podría mejorar mostrar un indicador "conectado / sin conexión" y no dibujar
 
 ### 5. CRUD en la UI y total de puntos por autor
 
-*(pendiente)*
+**Evidencia**
 
+Panel del autor 'ana': la tabla lista cada plano con su número de puntos y el Total.
+
+![Tabla y Total del autor](docs/img/05-tabla-total.png)
+
+Save exitoso: el plano queda guardado en el servidor y la lista se refresca.
+
+![save exitoso](docs/img/05-save-ok.png) 
+
+Save sobre un plano que no existe: el servidor responde 404 y la interfaz muestra el error.
+
+![Error de Save](docs/img/05-save-error-no-existe.png) 
+
+Delete exitoso: el canvas se limpia y el plano sale de la tabla
+
+![Delete exitoso](docs/img/05-delete-ok.png) 
+
+Segundo Delete del mismo plano: el servidor responde 404 y se muestra el error.
+
+![Error del segundo Delete](docs/img/05-delete-error-no-existe.png) 
+
+Backend detenido: la interfaz muestra que no puede conectarse
+
+![Backend caído](docs/img/05-error-backend-caido.png)
 ### 6. Selector de tecnología (None / STOMP)
 
 Como elegimos STOMP como backend de tiempo real, el selector tiene dos opciones: None (solo local) y STOMP (Spring). Se eliminó el código de Socket.IO porque nuestro backend no lo usa.
