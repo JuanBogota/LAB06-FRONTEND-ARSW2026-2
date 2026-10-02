@@ -1,4 +1,16 @@
-# Lab P4 — BluePrints en Tiempo Real (Sockets & STOMP)
+# Solución – Laboratorio #6: BluePrints en Tiempo Real (Java 21 / Spring Boot 3.3.x, STOMP)
+
+**Escuela Colombiana de Ingeniería – Arquitecturas de Software**
+
+**Autores:** Carlos Duban Rojas y Juan Daniel Bogotá Fuentes
+
+Informe de laboratorio documentando la integración del front de BluePrints con un backend de tiempo real (STOMP sobre Spring Boot).
+
+La solución del equipo está al final del documento.
+
+---
+
+## 📘 Enunciado – Lab P4 — BluePrints en Tiempo Real (Sockets & STOMP)
 
 > **Repositorio:** `DECSIS-ECI/Lab_P4_BluePrints_RealTime-Sokets`  
 > **Front:** React + Vite (Canvas, CRUD, y selector de tecnología RT)  
@@ -175,3 +187,105 @@ En la interfaz: selecciona **Socket.IO** o **STOMP**, define `author` y `name`, 
 
 ## 📄 Licencia
 MIT (o la definida por el curso/equipo).
+
+---
+
+# 📝 Solución del equipo
+
+## 🖥️ Entorno de desarrollo
+
+| Herramienta | Versión |
+|---|---|
+| Java (JDK instalado) | 25.0.1 (el código se compila con `release 21`) |
+| Maven | 3.9.12 |
+| Node.js | v24.21.0 |
+| npm | 11.19.0 |
+| Spring Boot | 3.3.4 |
+| Sistema operativo | Windows 11 |
+
+## 📖 Actividades del laboratorio
+
+### 1. Línea base: front y backend guía
+
+Se levantó el front (React + Vite, puerto 5173) y el backend STOMP de ejemplo (Spring Boot 3.3.4, puerto 8080) para observar el comportamiento inicial antes de integrar nuestra API. El estado inicial del plano se pide por REST (GET /api/blueprints/{author}/{name}) y los puntos nuevos viajan por STOMP: el cliente publica en /app/draw y el backend difunde a /topic/blueprints.{author}.{name}.
+
+Para ejecutar el backend fue necesario corregir su pom.xml y agregar una configuración de CORS. Se configuró el .env.local del front así:
+
+```bash
+VITE_API_BASE=http://localhost:8080
+VITE_STOMP_BASE=http://localhost:8080
+```
+
+`CorsConfig.java`:
+
+```java
+@Configuration
+public class CorsConfig implements WebMvcConfigurer {
+  @Override
+  public void addCorsMappings(CorsRegistry registry) {
+    registry.addMapping("/api/**")
+            .allowedOrigins("http://localhost:5173")
+            .allowedMethods("GET", "POST", "PUT", "DELETE");
+  }
+}
+```
+
+**Evidencia**
+
+Estado inicial por REST:
+
+```text
+PS C:\Users\juanb> curl.exe -i http://localhost:8080/api/blueprints/juan/plano-1
+HTTP/1.1 200
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Thu, 01 Oct 2026 19:22:13 GMT
+
+{"author":"juan","name":"plano-1","points":[{"x":10,"y":10},{"x":40,"y":50}]}
+```
+
+Canvas con el plano cargado:
+
+![alt text](docs/img/01-plano-cargado.png)
+
+Comportamiento tras hacer un clic en la pestaña 1 (ambas pestañas quedan en blanco):
+
+![alt text](docs/img/01-click-tab1.png)
+
+![alt text](docs/img/01-click-tab2.png)
+
+Tráfico STOMP observado en DevTools. Tras tres clics se ven tres pares SEND y MESSAGE:
+
+![alt text](docs/img/01-stomp-frames.png)
+
+
+El tráfico del WebSocket confirma el flujo publicar/suscribir: cada punto enviado a /app/draw produce un mensaje de vuelta desde el tópico del plano, y esa es la notificación que recibe la otra pestaña. Ambos canvas quedan en blanco tras el clic porque, el backend difunde solo el punto nuevo y el front redibuja únicamente lo que recibe (drawAll limpia el canvas y un único punto no produce trazo).
+
+
+---
+
+### 2. Integración de STOMP a nuestra API CRUD (puertos y adaptadores)
+
+*(pendiente)*
+
+### 3. Front: estado local y dibujo incremental
+
+*(pendiente)*
+
+### 4. Prueba de colaboración en vivo (2 pestañas)
+
+*(pendiente)*
+
+### 5. CRUD en la UI y total de puntos por autor
+
+*(pendiente)*
+
+### 6. Selector de tecnología (None / STOMP)
+
+*(pendiente)*
+
+### 7. Observabilidad, análisis y decisiones
+
+*(pendiente)*
+
+---
